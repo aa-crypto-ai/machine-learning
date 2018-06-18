@@ -49,6 +49,9 @@ class MachineLearning:
             'max_iteration': 999999,
         }
         self.cost_history = []
+
+        # control whether to save theta and gradient history during training
+        self.save_history = False
         self.theta_history = []
         self.gradient_history = []
 
@@ -243,12 +246,12 @@ class MachineLearning:
                 try:
                     cost, gradient = self.calc_cost_gradient(self.theta, self.X, self.y, self.lambda_)
 
-                    self.cost_history.append(cost)
-                    self.gradient_history.append(gradient)
-                    self.theta_history.append(self.theta)
+                    if self.save_history:
+                        self.gradient_history.append(gradient)
+                        self.theta_history.append(self.theta)
 
-                    if len(self.cost_history) >= 2:
-                        cost_improvement = self.cost_history[-2] - self.cost_history[-1]
+                    if self.cost_history:
+                        cost_improvement = self.cost_history[-1] - cost
                         if cost_improvement <= 0:
                             exit_msg = 'cost didn\'t decrease!'
                             error = True
@@ -258,6 +261,7 @@ class MachineLearning:
                             error = False
                             break
 
+                    self.cost_history.append(cost)
                     self.theta = self.theta.reshape(gradient.shape) - (self.alpha * gradient)
 
                 except KeyboardInterrupt:
@@ -285,15 +289,18 @@ class MachineLearning:
                     but there are no other possible methods yet
                 """
                 cost, gradient = self.calc_cost_gradient(theta, self.X, self.y, self.lambda_)
-                self.theta_history.append(theta)
+
                 self.cost_history.append(cost)
-                self.gradient_history.append(gradient)
+                if self.save_history:
+                    self.theta_history.append(theta)
+                    self.gradient_history.append(gradient)
 
             # need to store the first cost when theta = initial theta first
             cost, gradient = self.calc_cost_gradient(self.theta, self.X, self.y, self.lambda_)
             self.cost_history = [cost]
-            self.gradient_history = [gradient]
-            self.theta_history = [self.theta]
+            if self.save_history:
+                self.gradient_history = [gradient]
+                self.theta_history = [self.theta]
 
             args = {}
             if self.stopping_criteria['max_iteration'] is not None:
