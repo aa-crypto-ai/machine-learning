@@ -117,11 +117,12 @@ class NeuralNetwork(MachineLearning):
         a_s.append(a)
 
         # calc cost
-        J = (1.0/m) * np.sum(-y * np.log(a_s[-1]) - (1 - y) * np.log(1 - a_s[-1]))
+        unreg_cost = (1.0/m) * np.sum(-y * np.log(a_s[-1]) - (1 - y) * np.log(1 - a_s[-1]))
 
         # Add regularized error. Drop the bias terms in the 1st columns.
+        reg_cost = 0.0
         for theta_layer in thetas:
-            J = J + (lambda_ / (2.0*m)) * np.sum( np.square(theta_layer[:, 1:]) )
+            reg_cost = reg_cost + (lambda_ / (2.0*m)) * np.sum( np.square(theta_layer[:, 1:]) )
 
         # backpropagate
         # d_s[0] is no use, it's just for better layer indexing when we notate terms
@@ -161,9 +162,8 @@ class NeuralNetwork(MachineLearning):
         theta_gradient = np.array(
             reduce(lambda a,b: a+b, map(lambda theta_grad: theta_grad.flatten(self.flatten_order).tolist(), theta_grads))
         )
-        print('cost', J)
 
-        return J, theta_gradient
+        return unreg_cost, reg_cost, theta_gradient
 
 
     def predict_function(self, X, add_ones=True):

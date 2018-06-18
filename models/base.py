@@ -33,7 +33,7 @@ class MachineLearning:
         3. store the training result into a file
         
     """
-    alg_options = ['gd', 'fmin_bfgs']
+    alg_options = ['gd', 'minibatch_gd', 'fmin_bfgs']
 
     def __init__(self):
         self.X = None
@@ -42,6 +42,7 @@ class MachineLearning:
         self.lambda_ = 0
         self.theta = None
         self.alpha = 0.3
+        self.batch_size = None
 
         # below to be implemented
         self.stopping_criteria = {
@@ -145,15 +146,15 @@ class MachineLearning:
             when using scipy fmin_bfgs, it could have been more efficient by using a separate cost function / gradient function
             but now we favour the use of "gd" training algorithm
         """
-        cost, gradient = self.calc_cost_gradient(theta, X, y, l)
-        return cost
+        unreg_cost, reg_cost, gradient = self.calc_cost_gradient(theta, X, y, l)
+        return unreg_cost + reg_cost
 
     def gradient_function(self, theta, X, y, l):
         """ the function to return the gradient for scipy fmin_bfgs
             when using scipy fmin_bfgs, it could have been more efficient by using a separate cost function / gradient function
             but now we favour the use of "gd" training algorithm
         """
-        cost, gradient = self.calc_cost_gradient(theta, X, y, l)
+        unreg_cost, reg_cost, gradient = self.calc_cost_gradient(theta, X, y, l)
         return gradient
 
     def predict_function(self, X, add_ones=True):
@@ -236,18 +237,50 @@ class MachineLearning:
         if alg not in self.alg_options:
             raise Exception('choose algorithm: either ' + ' or '.join(self.alg_options))
 
+        if alg == 'minibatch_gd' and self.batch_size is None:
+            raise Exception('set self.batch_size for mini batch gradient descent')
+
         if not self.train_checked():
             raise Exception('Training not properly initialized')
 
-        if alg == 'gd':
+        if alg in ['gd', 'minibatch_gd']:
+            if alg == 'minibatch_gd':
+                np.random.seed(123)
 
             while True:
 
                 try:
-                    cost, gradient = self.calc_cost_gradient(self.theta, self.X, self.y, self.lambda_)
+                    if alg == 'gd':
+                        batches_X = [self.X]
+                        batches_y = [self.y]
+                    elif alg == 'minibatch_gd':
+                        # random indices
+                        remaining_indices = list(range(len(self.X)))
+                        batch_indices = []
+
+                        while remaining_indices and len(remaining_indices) >= self.batch_size:
+                            indices = np.random.choice(remaining_indices, self.batch_size, replace=False)
+                            remaining_indices = [i for i in remaining_indices if i not in indices]
+                            batch_indices.append(indices)
+                        if remaining_indices:
+                            batch_indices.append(remaining_indices)
+
+                        batches_X = [self.X[indices] for indices in batch_indices]
+                        batches_y = [self.y[indices] for indices in batch_indices]
+
+                    cost = 0.0
+                    for epoch, (batch_X, batch_y) in enumerate(zip(batches_X, batches_y)):
+
+                        batch_unreg_cost, batch_reg_cost, batch_gradient = self.calc_cost_gradient(self.theta, batch_X, batch_y, self.lambda_)
+                        # handle unregularized cost and regularized cost separately to ensure comparability of cost using grad descent and stochastic grad descent
+                        batch_cost = batch_unreg_cost * len(batch_X) + (batch_reg_cost * len(batch_X)) * (float(len(batch_X)) / len(self.X))
+                        cost += batch_cost
+                        self.theta = self.theta.reshape(batch_gradient.shape) - (self.alpha * batch_gradient)
+
+                    cost = cost / float(len(self.X))
 
                     if self.save_history:
-                        self.gradient_history.append(gradient)
+                        self.gradient_history.append(batch_gradient)
                         self.theta_history.append(self.theta)
 
                     if self.cost_history:
@@ -255,14 +288,17 @@ class MachineLearning:
                         if cost_improvement <= 0:
                             exit_msg = 'cost didn\'t decrease!'
                             error = True
-                            break
+                            # break
+
                         if cost_improvement <= 1e-10:
                             exit_msg = 'cost decreases very little!'
                             error = False
-                            break
+                            # break
+
+                    if len(self.cost_history) % 500 == 0:
+                        print('Run iterations: %d, Cost: %.5f' % (len(self.cost_history), cost))
 
                     self.cost_history.append(cost)
-                    self.theta = self.theta.reshape(gradient.shape) - (self.alpha * gradient)
 
                 except KeyboardInterrupt:
                     exit_msg = 'Keyboard Interrupt'
@@ -272,11 +308,10 @@ class MachineLearning:
             self.result = {
                 'optimal': {
                     'theta': self.theta,
-                    'cost': cost,
-                    'gradient': gradient,
+                    'cost': self.cost_history[-1],
+                    'gradient': batch_gradient,
                 },
                 'n_func_calls': len(self.cost_history),
-                'n_grad_calls': len(self.gradient_history),
                 'exit_msg': exit_msg,
                 'error': error,
             }
@@ -288,15 +323,16 @@ class MachineLearning:
                     this is inefficient as the same cost has to be re-computed,
                     but there are no other possible methods yet
                 """
-                cost, gradient = self.calc_cost_gradient(theta, self.X, self.y, self.lambda_)
+                unreg_cost, reg_cost, gradient = self.calc_cost_gradient(theta, self.X, self.y, self.lambda_)
 
-                self.cost_history.append(cost)
+                self.cost_history.append(unreg_cost + reg_cost)
                 if self.save_history:
                     self.theta_history.append(theta)
                     self.gradient_history.append(gradient)
 
             # need to store the first cost when theta = initial theta first
-            cost, gradient = self.calc_cost_gradient(self.theta, self.X, self.y, self.lambda_)
+            unreg_cost, reg_cost, gradient = self.calc_cost_gradient(self.theta, self.X, self.y, self.lambda_)
+            cost = unreg_cost + reg_cost
             self.cost_history = [cost]
             if self.save_history:
                 self.gradient_history = [gradient]
@@ -346,7 +382,6 @@ class MachineLearning:
                         'gradient': gopt,
                     },
                     'n_func_calls': n_func_calls,
-                    'n_grad_calls': n_grad_calls,
                     'exit_msg': warnflag,
                     'error': error,
                 }
@@ -359,10 +394,9 @@ class MachineLearning:
                     'optimal': {
                         'theta': self.theta,
                         'cost': self.cost_history[-1],
-                        'gradient': self.gradient_history[-1],
+                        'gradient': gopt,
                     },
                     'n_func_calls': len(self.cost_history),
-                    'n_grad_calls': len(self.gradient_history),
                     'exit_msg': 'Keyboard Interrupt',
                     'error': False,
                 }

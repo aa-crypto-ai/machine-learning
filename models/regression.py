@@ -16,15 +16,15 @@ class LogisticRegression(MachineLearning):
         cost2 = cost2.reshape((m,1))
         total_cost = y_ * cost1 + (1 - y_) * cost2
 
-        J = -((np.sum(total_cost))/m)
+        unreg_cost = -((np.sum(total_cost))/m)
         # add regularization to the cost
-        J = J + float(lambda_) / (2 * m) * theta_[1:].T.dot(theta_[1:])
+        reg_cost = float(lambda_) / (2 * m) * theta_[1:].T.dot(theta_[1:])
 
         grad = ( (X.T).dot(s - y_) ) / m
         # add regularization to the gradient
         grad[1:] = grad[1:] + float(lambda_) / m * theta_[1:]
 
-        return J, grad.flatten()
+        return unreg_cost, reg_cost, grad.flatten()
 
     def predict_function(self, X, add_ones=True):
 
@@ -46,13 +46,14 @@ class LinearRegression(MachineLearning):
         pred = X.dot(theta_)
 
         # cost with regularization
-        J = 1.0 / (2*m) * np.sum(np.power(pred - y, 2)) + float(lambda_) / (2*m) * theta_[1:].T.dot(theta_[1:])
+        unreg_cost = 1.0 / (2*m) * np.sum(np.power(pred - y, 2))
+        reg_cost = float(lambda_) / (2*m) * theta_[1:].T.dot(theta_[1:])
 
         grad = 1.0 / m * (X.T).dot( pred - y )
         # add regularization to the gradient
         grad[1:] = grad[1:] + float(lambda_) / m * theta_[1:]
 
-        return J, grad.flatten()
+        return unreg_cost, reg_cost, grad.flatten()
 
     def predict_function(self, X, add_ones=True):
 
